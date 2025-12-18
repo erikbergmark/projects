@@ -1,0 +1,263 @@
+---
+title: "425FinalProject"
+output: html_document
+date: "2025-11-25"
+---
+
+```{r}
+cps_data <- read.csv("Chicago_Public_Schools_-_School_Profile_Information_SY2425_20251125.csv")
+highschools <- cps_data[cps_data$Primary_Category == "HS", ]
+highschools <- highschools[ , (names(highschools) %in% c("Is_Middle_School", "Is_Elementary_School", "Administrator_Title", "Attendance_Boundaries", "Student_Count_Total", "Student_Count_Low_Income", "Student_Count_Special_Ed", "Student_Count_English_Learners", "Student_Count_Black", "Student_Count_Hispanic", "Student_Count_White", "Student_Count_Asian", "Student_Count_Native_American", "Student_Count_Other_Ethnicity", "Student_Count_Asian_Pacific_Islander", "Student_Count_Multi", "Student_Count_Hawaiian_Pacific_Islander", "Dress_Code", "Bilingual_Services", "College_Enrollment_Rate_School", "Is_GoCPS_Participant")) ]
+colSums(is.na(highschools))
+cleana <- highschools[!is.na(highschools$College_Enrollment_Rate_School), ]
+cleanb <- cleana[cleana$Student_Count_Total > 1, ]
+clean <- cleanb[cleanb$Bilingual_Services != "", ]
+
+str(clean)
+```
+```{r}
+
+clean$Student_Count_Total <- as.numeric(gsub(",", "", clean$Student_Count_Total))
+
+clean$Student_Count_Low_Income <- as.numeric(gsub(",", "", clean$Student_Count_Low_Income))
+
+clean$Student_Count_Black <- as.numeric(gsub(",", "", clean$Student_Count_Black))
+
+clean$Student_Count_Hispanic <- as.numeric(gsub(",", "", clean$Student_Count_Hispanic))
+
+clean$Student_Count_White <- as.numeric(gsub(",", "", clean$Student_Count_White))
+
+clean$Is_Middle_School <- as.factor(clean$Is_Middle_School)
+
+clean$Is_Elementary_School <- as.factor(clean$Is_Elementary_School)
+
+clean$Is_GoCPS_Participant <- as.factor(clean$Is_GoCPS_Participant)
+
+clean$Administrator_Title <- as.factor(clean$Administrator_Title)
+
+clean$Attendance_Boundaries <- as.factor(clean$Attendance_Boundaries)
+
+clean$Dress_Code <- as.factor(clean$Dress_Code)
+
+clean$Bilingual_Services <- as.factor(clean$Bilingual_Services)
+
+
+```
+
+
+```{r}
+colSums(is.na(clean))
+```
+
+Visualizations
+```{r}
+plot(clean$Student_Count_Total, clean$College_Enrollment_Rate_School,
+     xlab = "Total Students",
+     ylab = "College Enrollment Rate")
+```
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Dress_Code, data = clean)
+```
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Is_Middle_School, data = clean)
+```
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Is_Elementary_School, data = clean)
+```
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Administrator_Title, data = clean)
+```
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Attendance_Boundaries, data = clean)
+```
+
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Bilingual_Services, data = clean)
+```
+
+```{r}
+boxplot(College_Enrollment_Rate_School ~ Is_GoCPS_Participant, data = clean)
+```
+Initial Model
+
+```{r}
+model <- lm(College_Enrollment_Rate_School ~ ., data = clean)
+summary(model)
+```
+
+Linearity
+
+```{r}
+plot(model$fitted.values, model$residuals,
+     xlab = "Fitted Values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted Values")
+abline(h = 0, col = "red")
+```
+
+Multicollinearity
+
+```{r}
+library(car)
+vif(model)
+```
+
+Heteroscedasticity
+
+```{r}
+library(lmtest)
+bptest(model)
+plot(model, which = 1)
+```
+
+Normality
+
+```{r}
+plot(model, which = 2)
+shapiro.test(residuals(model))
+```
+
+influential points
+
+```{r}
+plot(model, which = 4)
+plot(model, which = 5)
+```
+
+Refined Model
+```{r}
+model2 <- lm(College_Enrollment_Rate_School ~ Student_Count_Total + Is_Middle_School + Is_Elementary_School + Administrator_Title + Attendance_Boundaries + Dress_Code + Bilingual_Services + Is_GoCPS_Participant, data = clean)
+summary(model2)
+```
+
+```{r}
+bptest(model2)
+plot(model2, which = 1)
+```
+
+```{r}
+library(MASS)
+vif(model2)
+plot(model2, which=4)
+plot(model2, which=5)
+boxcox(model2)
+```
+
+```{r}
+critval <- qt(0.05/(2*nobs(model2)), df=df.residual(model2)-1, lower=FALSE)
+outliers<-which(abs(rstudent(model2))>critval)
+rstudent(model2)[outliers]
+clean_final <- clean[-outliers, ]
+```
+Leaps and Bounds
+```{r}
+library(leaps)
+b <- regsubsets(College_Enrollment_Rate_School ~ Student_Count_Total + Is_Middle_School + Is_Elementary_School + Administrator_Title + Attendance_Boundaries + Dress_Code + Bilingual_Services + Is_GoCPS_Participant, data= clean_final)
+rs <- summary(b)
+rs$which
+```
+```{r}
+n <- dim(clean_final)[1]
+msize <- 1:8
+par(mfrow=c(2,2))
+plot(msize, rs$adjr2, xlab="Model Size", ylab="Adjusted R^2")
+plot(msize, rs$cp, xlab="Model Size", ylab="Cp")
+
+Aic <- n*log(rs$rss/n) + 2*msize
+Bic <- n*log(rs$rss/n) + log(n)*msize
+plot(msize, Aic, xlab="Model Size", ylab="AIC")
+plot(msize, Bic, xlab="Model Size", ylab="BIC")
+```
+
+```{r}
+final_model <- lm(College_Enrollment_Rate_School ~ Student_Count_Total + Is_Elementary_School + Attendance_Boundaries + Is_GoCPS_Participant, data= clean_final)
+summary(final_model)
+```
+
+```{r}
+plot(final_model, which=4)
+plot(final_model, which=5)
+```
+
+```{r}
+critval <- qt(0.05/(2*nobs(final_model)), df=df.residual(final_model)-1, lower=FALSE)
+outliers<-which(abs(rstudent(final_model))>critval)
+rstudent(final_model)[outliers]
+```
+```{r}
+plot(final_model$fitted.values, final_model$residuals,
+     xlab = "Fitted Values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted Values (Final Model)")
+abline(h = 0, col = "red")
+```
+```{r}
+bptest(final_model)
+plot(final_model, which = 1)
+```
+
+
+
+
+Leaps and Bounds with WLS
+```{r}
+b <- regsubsets(College_Enrollment_Rate_School ~ Student_Count_Total + Is_Middle_School + Is_Elementary_School + Administrator_Title + Attendance_Boundaries + Dress_Code + Bilingual_Services + Is_GoCPS_Participant, data= clean_final, weights=1/clean_final$Student_Count_Total)
+rs <- summary(b)
+rs$which
+```
+
+```{r}
+n <- dim(clean_final)[1]
+msize <- 1:8
+par(mfrow=c(2,2))
+plot(msize, rs$adjr2, xlab="Model Size", ylab="Adjusted R^2")
+plot(msize, rs$cp, xlab="Model Size", ylab="Cp")
+
+Aic <- n*log(rs$rss/n) + 2*msize
+Bic <- n*log(rs$rss/n) + log(n)*msize
+plot(msize, Aic, xlab="Model Size", ylab="AIC")
+plot(msize, Bic, xlab="Model Size", ylab="BIC")
+```
+
+```{r}
+final_model_wls <- lm(College_Enrollment_Rate_School ~ Student_Count_Total + Administrator_Title + Attendance_Boundaries + Is_GoCPS_Participant, data= clean_final, weights = 1/Student_Count_Total)
+summary(final_model_wls)
+```
+
+```{r}
+plot(final_model_wls, which=4)
+plot(final_model_wls, which=5)
+```
+
+
+```{r}
+critval <- qt(0.05/(2*nobs(final_model_wls)), df=df.residual(final_model_wls)-1, lower=FALSE)
+outliers<-which(abs(rstudent(final_model_wls))>critval)
+rstudent(final_model_wls)[outliers]
+```
+
+
+```{r}
+plot(final_model_wls$fitted.values, final_model_wls$residuals,
+     xlab = "Fitted Values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted Values (Final WLS Model)")
+abline(h = 0, col = "red")
+```
+
+```{r}
+bptest(final_model_wls)
+plot(final_model_wls, which = 1)
+```
+
+```{r}
+vif(final_model_wls)
+```
+
+
